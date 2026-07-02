@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SuBuu</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+body { background: #f5fbff; }
+
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+</style>
+</head>
+
+<body class="flex justify-center p-6">
+
+<div class="w-full max-w-xl bg-white shadow-xl rounded-2xl p-6">
+
+    <h1 class="text-3xl font-bold text-center text-sky-500 mb-4">💰 SuBuu</h1>
+
+    <!-- Balance -->
+    <div class="text-center text-xl font-semibold mb-4">
+        Balance: <span id="balance" class="text-sky-600">0</span> MMK
+    </div>
+
+    <!-- Input -->
+    <input id="amount" type="number"
+        class="w-full border p-3 rounded-lg mb-3 focus:ring-2 focus:ring-sky-300"
+        placeholder="Enter amount">
+
+    <div class="flex gap-3 mb-3">
+        <button onclick="deposit()"
+            class="w-1/2 bg-sky-500 text-white p-3 rounded-lg hover:bg-sky-600">
+            Deposit
+        </button>
+
+        <button onclick="withdraw()"
+            class="w-1/2 bg-red-400 text-white p-3 rounded-lg hover:bg-red-500">
+            Withdraw
+        </button>
+    </div>
+
+    <!-- FILTER BUTTONS -->
+    <div class="flex justify-center gap-2 mb-4">
+        <button onclick="setFilter('all')" class="px-3 py-1 bg-gray-200 rounded">All</button>
+        <button onclick="setFilter('Deposit')" class="px-3 py-1 bg-green-200 rounded">Deposit</button>
+        <button onclick="setFilter('Withdraw')" class="px-3 py-1 bg-red-200 rounded">Withdraw</button>
+    </div>
+
+    <h2 class="text-lg font-semibold mb-2">Transaction History</h2>
+    <div id="history" class="space-y-2"></div>
+
+    <!-- Pagination -->
+    <div class="flex justify-center gap-2 mt-4">
+        <button onclick="prevPage()" class="px-3 py-1 bg-gray-200 rounded">Prev</button>
+        <span id="pageInfo" class="px-3 py-1"></span>
+        <button onclick="nextPage()" class="px-3 py-1 bg-gray-200 rounded">Next</button>
+    </div>
+
+</div>
+
+<script>
+let db;
+let balance = 0;
+
+let allTransactions = [];
+let filteredTransactions = [];
+
+let currentPage = 1;
+const itemsPerPage = 5;
+
+let currentFilter = "all";
+
+// DB
+let request = indexedDB.open("SuBuuDB", 1);
+
+request.onupgradeneeded = function(e) {
+    db = e.target.result;
+    db.createObjectStore("transactions", { keyPath: "id", autoIncrement: true });
+};
+
+request.onsuccess = function(e) {
+    db = e.target.result;
+    loadData();
+};
+
+// format
+function formatNumber(num) {
+    return num.toLocaleString();
+}
+
+function formatTime(date) {
+    let h = date.getHours();
+    let m = String(date.getMinutes()).padStart(2,'0');
+    let session = h >= 12 ? "PM" : "AM";
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `${h}:${m} ${session}`;
+}
+
+function formatDate(date) {
+    let d = String(date.getDate()).padStart(2,'0');
+    let m = String(date.getMonth()+1).padStart(2,'0');
+    let y = String(date.getFullYear()).slice(-2);
+    return `${d}-${m}-${y}`;
+}
+
+// actions
+function deposit() {
+    let amount = parseFloat(document.getElementById("amount").value);
+    if (!amount || amount <= 0) return alert("Enter valid amount");
+
+    balance += amount;
+    save("Deposit", amount);
+    document.getElementById("amount").value = "";
+}
+
+function withdraw() {
+    let amount = parseFloat(document.getElementById("amount").value);
+    if (!amount || amount <= 0) return alert("Enter valid amount");
+
+    if (amount > balance) return alert("Not enough balance");
+
+    balance -= amount;
+    save("Withdraw", amount);
+    document.getElementById("amount").value = "";
+}
+
+// save
+function save(type, amount) {
+    let tx = db.transaction("transactions", "readwrite");
+    let store = tx.objectStore("transactions");
+
+    let now = new Date();
+
+    store.add({
+        type,
+        amount,
+        date: formatDate(now),
+        time: formatTime(now)
+    });
+
+    tx.oncomplete = loadData;
+}
+
+// load
+function loadData() {
+    let tx = db.transaction("transactions", "readonly");
+    let store = tx.objectStore("transactions");
+
+    let req = store.getAll();
+
+    req.onsuccess = function() {
+        let data = req.result.reverse();
+
+        allTransactions = data;
+
+        balance = 0;
+        data.forEach(item => {
+            if (item.type === "Deposit") balance += item.amount;
+            else balance -= item.amount;
+        });
+
+        document.getElementById("balance").innerText = formatNumber(balance);
+
+        applyFilter();
+    };
+}
+
+// FILTER
+function setFilter(type) {
+    currentFilter = type;
+    currentPage = 1;
+    applyFilter();
+}
+
+function applyFilter() {
+    if (currentFilter === "all") {
+        filteredTransactions = allTransactions;
+    } else {
+        filteredTransactions = allTransactions.filter(t => t.type === currentFilter);
+    }
+
+    renderPage();
+}
+
+// pagination render
+function renderPage() {
+    let start = (currentPage - 1) * itemsPerPage;
+    let end = start + itemsPerPage;
+
+    let pageItems = filteredTransactions.slice(start, end);
+
+    let html = "";
+
+    pageItems.forEach(item => {
+        html += `
+        <div class="p-3 bg-sky-50 rounded-lg border">
+            <div class="flex justify-between">
+                <span class="${item.type === 'Deposit' ? 'text-green-600' : 'text-red-500'} font-semibold">
+                    ${item.type}
+                </span>
+                <span>${formatNumber(item.amount)} MMK</span>
+            </div>
+            <div class="text-sm text-gray-500">
+                ${item.date} • ${item.time}
+            </div>
+        </div>
+        `;
+    });
+
+    document.getElementById("history").innerHTML = html;
+
+    let totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+    document.getElementById("pageInfo").innerText =
+        `${currentPage} / ${totalPages || 1}`;
+}
+
+// pagination
+function nextPage() {
+    let totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+    if (currentPage < totalPages) {
+        currentPage++;
+        renderPage();
+    }
+}
+
+function prevPage() {
+    if (currentPage > 1) {
+        currentPage--;
+        renderPage();
+    }
+}
+</script>
+
+</body>
+</html>
