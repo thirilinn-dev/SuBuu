@@ -1,242 +1,1029 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
-<meta charset="UTF-8">
-<title>SuBuu</title>
-
-<script src="https://cdn.tailwindcss.com"></script>
-
-<style>
-body { background: #f5fbff; }
-
-input[type=number]::-webkit-inner-spin-button,
-input[type=number]::-webkit-outer-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thiri's SuBuu</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            200: '#bae6fd',
+                            300: '#7dd3fc',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                            950: '#082f49',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+        .transition-theme {
+            transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, shadow 0.2s ease;
+        }
+        /* Custom scrollbar for history list */
+        #history::-webkit-scrollbar {
+            width: 4px;
+        }
+        #history::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        #history::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 9999px;
+        }
+        .dark #history::-webkit-scrollbar-thumb {
+            background: #1e293b;
+        }
+        #history::-webkit-scrollbar-thumb:hover {
+            background: #cbd5e1;
+        }
+        .dark #history::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+    </style>
+    <script>
+        // Init theme immediately to prevent white flash
+        (function() {
+            let theme = localStorage.getItem('theme');
+            if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        })();
+    </script>
 </head>
+<body class="transition-theme bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 lg:h-screen lg:overflow-hidden flex flex-col lg:flex-row font-sans antialiased">
 
-<body class="flex justify-center p-6">
+    <!-- Mobile Drawer Backdrop -->
+    <div id="sidebar-backdrop" onclick="toggleSidebar()" class="fixed inset-0 z-30 bg-slate-900/40 backdrop-blur-sm hidden lg:hidden"></div>
 
-<div class="w-full max-w-xl bg-white shadow-xl rounded-2xl p-6">
-
-    <h1 class="text-3xl font-bold text-center text-sky-500 mb-4">💰 SuBuu</h1>
-
-    <!-- Balance -->
-    <div class="text-center text-xl font-semibold mb-4">
-        Balance: <span id="balance" class="text-sky-600">0</span> MMK
-    </div>
-
-    <!-- Input -->
-    <input id="amount" type="number"
-        class="w-full border p-3 rounded-lg mb-3 focus:ring-2 focus:ring-sky-300"
-        placeholder="Enter amount">
-
-    <div class="flex gap-3 mb-3">
-        <button onclick="deposit()"
-            class="w-1/2 bg-sky-500 text-white p-3 rounded-lg hover:bg-sky-600">
-            Deposit
-        </button>
-
-        <button onclick="withdraw()"
-            class="w-1/2 bg-red-400 text-white p-3 rounded-lg hover:bg-red-500">
-            Withdraw
-        </button>
-    </div>
-
-    <!-- FILTER BUTTONS -->
-    <div class="flex justify-center gap-2 mb-4">
-        <button onclick="setFilter('all')" class="px-3 py-1 bg-gray-200 rounded">All</button>
-        <button onclick="setFilter('Deposit')" class="px-3 py-1 bg-green-200 rounded">Deposit</button>
-        <button onclick="setFilter('Withdraw')" class="px-3 py-1 bg-red-200 rounded">Withdraw</button>
-    </div>
-
-    <h2 class="text-lg font-semibold mb-2">Transaction History</h2>
-    <div id="history" class="space-y-2"></div>
-
-    <!-- Pagination -->
-    <div class="flex justify-center gap-2 mt-4">
-        <button onclick="prevPage()" class="px-3 py-1 bg-gray-200 rounded">Prev</button>
-        <span id="pageInfo" class="px-3 py-1"></span>
-        <button onclick="nextPage()" class="px-3 py-1 bg-gray-200 rounded">Next</button>
-    </div>
-
-</div>
-
-<script>
-let db;
-let balance = 0;
-
-let allTransactions = [];
-let filteredTransactions = [];
-
-let currentPage = 1;
-const itemsPerPage = 5;
-
-let currentFilter = "all";
-
-// DB
-let request = indexedDB.open("SuBuuDB", 1);
-
-request.onupgradeneeded = function(e) {
-    db = e.target.result;
-    db.createObjectStore("transactions", { keyPath: "id", autoIncrement: true });
-};
-
-request.onsuccess = function(e) {
-    db = e.target.result;
-    loadData();
-};
-
-// format
-function formatNumber(num) {
-    return num.toLocaleString();
-}
-
-function formatTime(date) {
-    let h = date.getHours();
-    let m = String(date.getMinutes()).padStart(2,'0');
-    let session = h >= 12 ? "PM" : "AM";
-    h = h % 12;
-    if (h === 0) h = 12;
-    return `${h}:${m} ${session}`;
-}
-
-function formatDate(date) {
-    let d = String(date.getDate()).padStart(2,'0');
-    let m = String(date.getMonth()+1).padStart(2,'0');
-    let y = String(date.getFullYear()).slice(-2);
-    return `${d}-${m}-${y}`;
-}
-
-// actions
-function deposit() {
-    let amount = parseFloat(document.getElementById("amount").value);
-    if (!amount || amount <= 0) return alert("Enter valid amount");
-
-    balance += amount;
-    save("Deposit", amount);
-    document.getElementById("amount").value = "";
-}
-
-function withdraw() {
-    let amount = parseFloat(document.getElementById("amount").value);
-    if (!amount || amount <= 0) return alert("Enter valid amount");
-
-    if (amount > balance) return alert("Not enough balance");
-
-    balance -= amount;
-    save("Withdraw", amount);
-    document.getElementById("amount").value = "";
-}
-
-// save
-function save(type, amount) {
-    let tx = db.transaction("transactions", "readwrite");
-    let store = tx.objectStore("transactions");
-
-    let now = new Date();
-
-    store.add({
-        type,
-        amount,
-        date: formatDate(now),
-        time: formatTime(now)
-    });
-
-    tx.oncomplete = loadData;
-}
-
-// load
-function loadData() {
-    let tx = db.transaction("transactions", "readonly");
-    let store = tx.objectStore("transactions");
-
-    let req = store.getAll();
-
-    req.onsuccess = function() {
-        let data = req.result.reverse();
-
-        allTransactions = data;
-
-        balance = 0;
-        data.forEach(item => {
-            if (item.type === "Deposit") balance += item.amount;
-            else balance -= item.amount;
-        });
-
-        document.getElementById("balance").innerText = formatNumber(balance);
-
-        applyFilter();
-    };
-}
-
-// FILTER
-function setFilter(type) {
-    currentFilter = type;
-    currentPage = 1;
-    applyFilter();
-}
-
-function applyFilter() {
-    if (currentFilter === "all") {
-        filteredTransactions = allTransactions;
-    } else {
-        filteredTransactions = allTransactions.filter(t => t.type === currentFilter);
-    }
-
-    renderPage();
-}
-
-// pagination render
-function renderPage() {
-    let start = (currentPage - 1) * itemsPerPage;
-    let end = start + itemsPerPage;
-
-    let pageItems = filteredTransactions.slice(start, end);
-
-    let html = "";
-
-    pageItems.forEach(item => {
-        html += `
-        <div class="p-3 bg-sky-50 rounded-lg border">
-            <div class="flex justify-between">
-                <span class="${item.type === 'Deposit' ? 'text-green-600' : 'text-red-500'} font-semibold">
-                    ${item.type}
-                </span>
-                <span>${formatNumber(item.amount)} MMK</span>
+    <!-- Sidebar Layout -->
+    <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-72 bg-white dark:bg-slate-900 border-r border-slate-200/60 dark:border-slate-800/60 flex flex-col justify-between transform -translate-x-full lg:translate-x-0 lg:static transition-transform duration-300 ease-in-out h-screen flex-shrink-0">
+        
+        <!-- Sidebar Branding -->
+        <div class="p-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/50">
+            <div class="flex items-center gap-3">
+                <div class="bg-gradient-to-tr from-brand-500 to-indigo-650 p-2 rounded-xl text-white shadow-md shadow-brand-500/10">
+                    <i data-lucide="wallet-cards" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="text-base font-bold tracking-tight text-slate-900 dark:text-white leading-none">
+                        Thiri's SuBuu
+                    </h1>
+                    <p class="text-[10px] text-slate-400 dark:text-slate-500 font-bold tracking-wider uppercase mt-1">Smart Savings</p>
+                </div>
             </div>
-            <div class="text-sm text-gray-500">
-                ${item.date} • ${item.time}
+            <button onclick="toggleSidebar()" class="lg:hidden p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <!-- Sidebar Mid Navigation & Goals -->
+        <div class="flex-grow p-4.5 space-y-6 overflow-y-auto">
+            <!-- Menu Navigation -->
+            <nav class="space-y-1.5">
+                <a href="#" class="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-brand-50 dark:bg-brand-950/20 text-brand-600 dark:text-brand-400 font-bold text-sm transition-all duration-200">
+                    <i data-lucide="layout-dashboard" class="w-4.5 h-4.5"></i>
+                    Dashboard
+                </a>
+                <a href="#" onclick="alert('Savings Goals details can be viewed below!')" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-850 hover:text-slate-900 dark:hover:text-white font-medium text-sm transition-all duration-200">
+                    <i data-lucide="target" class="w-4.5 h-4.5"></i>
+                    Savings Goals
+                </a>
+                <a href="#" onclick="alert('Analytics reports are coming soon!')" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-850 hover:text-slate-900 dark:hover:text-white font-medium text-sm transition-all duration-200">
+                    <i data-lucide="line-chart" class="w-4.5 h-4.5"></i>
+                    Analytics
+                </a>
+            </nav>
+
+            <!-- Savings Goal Progress Card -->
+            <div class="bg-slate-50 dark:bg-slate-950/30 border border-slate-200/60 dark:border-slate-800/80 p-4 rounded-xl transition-theme shadow-sm">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Savings Goal</span>
+                    <button onclick="setGoalAmount()" class="text-[10px] text-brand-500 hover:text-brand-600 font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer">
+                        <i data-lucide="pencil" class="w-2.5 h-2.5"></i> Edit
+                    </button>
+                </div>
+                
+                <div class="mb-3.5 space-y-1.5">
+                    <div class="flex items-baseline justify-between">
+                        <span class="text-xs text-slate-500 dark:text-slate-455">Target:</span>
+                        <span class="text-xs font-bold text-slate-800 dark:text-slate-200" id="goalAmountDisplay">1,000,000 MMK</span>
+                    </div>
+                    <div class="flex items-baseline justify-between">
+                        <span class="text-xs text-slate-500 dark:text-slate-455">Current:</span>
+                        <span class="text-xs font-bold text-brand-600 dark:text-brand-400" id="goalCurrentDisplay">0 MMK</span>
+                    </div>
+                </div>
+
+                <!-- Progress bar -->
+                <div class="w-full bg-slate-200 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                    <div id="goalProgressBar" class="bg-gradient-to-r from-brand-500 to-indigo-650 h-full rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+                </div>
+                <div class="flex justify-between items-center mt-2.5">
+                    <span class="text-[10px] text-slate-400 dark:text-slate-500 font-bold" id="goalPercentDisplay">0% Achieved</span>
+                    <span class="text-[10px] text-slate-400 dark:text-slate-500" id="goalRemainingDisplay">1,000,000 MMK left</span>
+                </div>
             </div>
         </div>
-        `;
-    });
 
-    document.getElementById("history").innerHTML = html;
+        <!-- Sidebar Bottom Profile & Theme Toggle -->
+        <div class="p-4 border-t border-slate-100 dark:border-slate-800/50 space-y-4">
+            <!-- Theme Toggle Row -->
+            <div class="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-200/40 dark:border-slate-800/45">
+                <span class="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                    <i data-lucide="moon" class="w-4 h-4"></i> Dark Mode
+                </span>
+                <button onclick="toggleTheme()" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-slate-200 dark:bg-brand-500" role="switch" aria-checked="false">
+                    <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0 dark:translate-x-5"></span>
+                </button>
+            </div>
 
-    let totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
-    document.getElementById("pageInfo").innerText =
-        `${currentPage} / ${totalPages || 1}`;
-}
+            <!-- Profile Info -->
+            <div class="flex items-center gap-3 px-2">
+                <div class="w-9 h-9 rounded-full bg-gradient-to-tr from-brand-500 to-purple-650 flex items-center justify-center text-white font-bold text-xs shadow-md shadow-brand-500/10">
+                    TL
+                </div>
+                <div class="min-w-0">
+                    <p class="text-xs font-bold text-slate-855 dark:text-slate-100 truncate">Thiri Linn</p>
+                    <p class="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Premium Owner</p>
+                </div>
+            </div>
+        </div>
+    </aside>
 
-// pagination
-function nextPage() {
-    let totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
-    if (currentPage < totalPages) {
-        currentPage++;
-        renderPage();
-    }
-}
+    <!-- Main Layout Wrapper -->
+    <div class="flex-grow flex flex-col min-w-0 lg:h-screen lg:overflow-hidden">
+        
+        <!-- Top Navigation Bar (Mobile only) -->
+        <header class="w-full flex-shrink-0 border-b border-slate-200/60 dark:border-slate-900/60 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md sticky top-0 z-30 transition-theme lg:hidden">
+            <div class="max-w-7xl mx-auto px-6 py-3 flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <button onclick="toggleSidebar()" class="p-2 -ml-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition duration-200" aria-label="Toggle Sidebar">
+                        <i data-lucide="menu" class="w-5 h-5"></i>
+                    </button>
+                    <div class="bg-gradient-to-tr from-brand-500 to-indigo-650 p-1.5 rounded-xl text-white shadow-md shadow-brand-500/10">
+                        <i data-lucide="wallet-cards" class="w-4.5 h-4.5"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-sm font-bold tracking-tight text-slate-900 dark:text-white leading-none">
+                            Thiri's SuBuu
+                        </h1>
+                        <p class="text-[9px] text-slate-400 dark:text-slate-500 font-bold tracking-wider uppercase mt-0.5">Smart Savings Tracker</p>
+                    </div>
+                </div>
+            </div>
+        </header>
 
-function prevPage() {
-    if (currentPage > 1) {
-        currentPage--;
-        renderPage();
-    }
-}
-</script>
+        <!-- Main Dashboard Container -->
+        <main class="flex-grow lg:h-0 lg:min-h-0 lg:overflow-hidden max-w-7xl w-full mx-auto px-6 py-4 flex flex-col">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-grow lg:h-0 lg:min-h-0 lg:overflow-hidden">
+                
+                <!-- Left Column: Balance Card, Stats & Input Form -->
+                <div class="lg:col-span-5 flex flex-col gap-4 lg:h-full lg:min-h-0 flex-shrink-0 justify-between">
+                    
+                    <!-- Side-by-Side Card & Stats Section -->
+                    <div class="flex flex-col sm:flex-row gap-4 flex-shrink-0">
+                        
+                        <!-- Credit Card Mockup -->
+                        <div class="relative w-full sm:w-[55%] max-w-[280px] aspect-[1.62/1] rounded-2xl bg-gradient-to-tr from-brand-600 via-indigo-650 to-purple-650 text-white p-4.5 shadow-md overflow-hidden select-none flex flex-col justify-between transition duration-200">
+                            <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_60%)]"></div>
+                            <div class="absolute -right-8 -bottom-8 w-24 h-24 rounded-full bg-white/5 blur-xl"></div>
+                            
+                            <!-- Top Card Row -->
+                            <div class="flex justify-between items-start z-10">
+                                <div>
+                                    <p class="text-xs uppercase tracking-widest text-brand-100 font-bold">Savings Card</p>
+                                    <h3 class="text-sm font-bold tracking-tight mt-0.5">Thiri's Wallet</h3>
+                                </div>
+                                <div class="bg-amber-400/80 w-8.5 h-6 rounded-sm flex items-center justify-center overflow-hidden border border-amber-300/30">
+                                    <!-- Chip details -->
+                                    <div class="grid grid-cols-3 gap-0.5 w-full h-full p-0.5 opacity-60">
+                                        <div class="border-r border-b border-amber-600/30"></div>
+                                        <div class="border-r border-b border-amber-600/30"></div>
+                                        <div class="border-b border-amber-600/30"></div>
+                                        <div class="border-r border-amber-600/30"></div>
+                                        <div class="border-r border-amber-600/30"></div>
+                                        <div></div>
+                                    </div>
+                                </div>
+                            </div>
 
+                            <!-- Card Balance Display -->
+                            <div class="z-10 my-0.5">
+                                <p class="text-xs text-brand-200 uppercase tracking-widest font-semibold">Current Balance</p>
+                                <div class="flex items-baseline mt-0.5">
+                                    <span class="text-2xl font-black tracking-tight leading-none" id="balanceDisplay">0</span>
+                                    <span class="text-xs font-bold ml-1.5 text-brand-200">MMK</span>
+                                </div>
+                            </div>
+
+                            <!-- Card Owner & Icon -->
+                            <div class="flex justify-between items-end z-10">
+                                <div>
+                                    <p class="text-[10px] uppercase tracking-wider text-brand-200">Card Owner</p>
+                                    <p class="text-xs font-bold tracking-wide uppercase text-white leading-none">Thiri Linn</p>
+                                </div>
+                                <svg class="w-5 h-5 text-white/80" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        <!-- Stacked Stats Column -->
+                        <div class="w-full sm:w-[45%] flex flex-col justify-between gap-3">
+                            <!-- Deposits Card -->
+                            <div class="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 p-3 rounded-xl flex items-center gap-3 transition-theme flex-1">
+                                <div class="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 text-emerald-500 dark:text-emerald-400 flex-shrink-0">
+                                    <i data-lucide="arrow-down-left" class="w-4 h-4"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Deposits</p>
+                                    <p class="text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 truncate" id="totalDeposits">0 MMK</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Withdrawals Card -->
+                            <div class="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 p-3 rounded-xl flex items-center gap-3 transition-theme flex-1">
+                                <div class="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/20 text-rose-500 dark:text-rose-400 flex-shrink-0">
+                                    <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Withdrawals</p>
+                                    <p class="text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 truncate" id="totalWithdrawals">0 MMK</p>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- New Transaction Input form -->
+                    <div class="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 p-4 rounded-xl transition-theme">
+                        <h3 class="text-xs font-bold text-slate-855 dark:text-slate-200 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                            <i data-lucide="arrow-left-right" class="w-4.5 h-4.5 text-brand-500"></i>
+                            New Transaction
+                        </h3>
+                        
+                        <div class="space-y-3">
+                            <!-- Amount -->
+                            <div>
+                                <label for="amount" class="block text-xs font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider mb-1">Amount</label>
+                                <div class="relative">
+                                    <input id="amount" type="number" min="0.01" step="any"
+                                        class="w-full bg-slate-50/50 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800 rounded-lg py-2 px-3 focus:ring-1 focus:ring-brand-500 focus:border-brand-500 dark:focus:ring-brand-500 dark:focus:border-brand-500 outline-none text-slate-800 dark:text-slate-100 font-bold text-sm transition duration-150"
+                                        placeholder="0.00">
+                                    <div class="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                                        <span class="text-xs font-bold text-slate-400 uppercase">MMK</span>
+                                    </div>
+                                </div>
+                                <p id="amountError" class="text-xs text-red-500 mt-1 hidden">Please enter a valid amount greater than 0.</p>
+                            </div>
+
+                            <!-- Note -->
+                            <div>
+                                <label for="note" class="block text-xs font-bold text-slate-455 dark:text-slate-500 uppercase tracking-wider mb-1">Note</label>
+                                <input id="note" type="text" maxlength="80"
+                                    class="w-full bg-slate-50/50 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800 rounded-lg py-2 px-3 focus:ring-1 focus:ring-brand-500 focus:border-brand-500 dark:focus:ring-brand-500 dark:focus:border-brand-500 outline-none text-slate-800 dark:text-slate-100 transition duration-150 text-sm"
+                                    placeholder="Add custom notes here...">
+                            </div>
+
+                            <!-- Buttons -->
+                            <div class="grid grid-cols-2 gap-3 pt-1">
+                                <button onclick="prepareTransaction('Deposit')"
+                                    class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold py-2 px-3 rounded-lg shadow-sm text-xs transition duration-150 flex items-center justify-center gap-1.5 transform active:scale-95 cursor-pointer">
+                                    <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                                    Deposit
+                                </button>
+                                
+                                <button onclick="prepareTransaction('Withdraw')"
+                                    class="w-full bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-bold py-2 px-3 rounded-lg shadow-sm text-xs transition duration-150 flex items-center justify-center gap-1.5 transform active:scale-95 cursor-pointer">
+                                    <i data-lucide="minus-circle" class="w-4 h-4"></i>
+                                    Withdraw
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                
+                <!-- Right Column: Filter Controls and Transaction History List -->
+                <div class="lg:col-span-7 flex flex-col gap-4 lg:h-full lg:min-h-0 lg:overflow-hidden">
+                    
+                    <!-- Filters panel -->
+                    <div class="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 p-4 rounded-xl flex-shrink-0 transition-theme">
+                        <div class="flex flex-col gap-3">
+                            <!-- Top Header and Segmented control -->
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-805 pb-3 transition-theme">
+                                <h3 class="text-xs font-bold text-slate-855 dark:text-slate-200 flex items-center gap-2 uppercase tracking-wider">
+                                    <i data-lucide="sliders-horizontal" class="w-4 h-4 text-brand-500"></i>
+                                    Filter Options
+                                </h3>
+                                
+                                <!-- Type Filters -->
+                                <div class="flex bg-slate-50 dark:bg-slate-950 p-0.5 rounded-lg self-start sm:self-auto border border-slate-100 dark:border-slate-800/85 transition-theme">
+                                    <button onclick="setFilter('all')" id="filter-all" class="px-4 py-1.5 text-xs font-bold rounded-md transition-all bg-white dark:bg-slate-800 text-slate-855 dark:text-slate-100 shadow-sm border border-slate-200/30 dark:border-slate-700/50 cursor-pointer">All</button>
+                                    <button onclick="setFilter('Deposit')" id="filter-deposit" class="px-4 py-1.5 text-xs font-bold rounded-md transition-all text-slate-455 dark:text-slate-400 cursor-pointer">Deposits</button>
+                                    <button onclick="setFilter('Withdraw')" id="filter-withdraw" class="px-4 py-1.5 text-xs font-bold rounded-md transition-all text-slate-455 dark:text-slate-400 cursor-pointer">Withdrawals</button>
+                                </div>
+                            </div>
+
+                            <!-- Date filter controls -->
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                    <label for="datePreset" class="block text-xs font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider mb-1">Date Range</label>
+                                    <select id="datePreset" onchange="onDatePresetChange()"
+                                        class="w-full bg-slate-50 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800 rounded-lg p-2 text-xs focus:ring-1 focus:ring-brand-500 outline-none text-slate-800 dark:text-slate-100 transition-theme font-semibold">
+                                        <option value="all">All Time</option>
+                                        <option value="today">Today</option>
+                                        <option value="yesterday">Yesterday</option>
+                                        <option value="week">This Week</option>
+                                        <option value="month">This Month</option>
+                                        <option value="custom">Custom Range</option>
+                                    </select>
+                                </div>
+                                
+                                <!-- Custom Date range inputs -->
+                                <div id="customDateContainer" class="md:col-span-2 grid grid-cols-2 gap-3 opacity-30 pointer-events-none transition-all duration-300">
+                                    <div>
+                                        <label for="fromDate" class="block text-xs font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider mb-1">From Date</label>
+                                        <input id="fromDate" type="date" onchange="onCustomDateChange()"
+                                            class="w-full bg-slate-50 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-brand-500 outline-none text-slate-800 dark:text-slate-100 transition-theme">
+                                    </div>
+                                    <div>
+                                        <label for="toDate" class="block text-xs font-bold text-slate-455 dark:text-slate-500 uppercase tracking-wider mb-1">To Date</label>
+                                        <input id="toDate" type="date" onchange="onCustomDateChange()"
+                                            class="w-full bg-slate-50 dark:bg-slate-950/30 border border-slate-200/80 dark:border-slate-800 rounded-lg p-1.5 text-xs focus:ring-1 focus:ring-brand-500 outline-none text-slate-800 dark:text-slate-100 transition-theme">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Transaction history panel -->
+                    <div class="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 p-4 rounded-xl flex-1 lg:h-0 lg:min-h-0 flex flex-col justify-between overflow-hidden transition-theme">
+                        <div class="flex-grow flex flex-col overflow-hidden">
+                            
+                            <!-- Panel Header -->
+                            <div class="flex justify-between items-center mb-3 flex-shrink-0">
+                                <h3 class="text-xs font-bold text-slate-855 dark:text-slate-200 flex items-center gap-2 uppercase tracking-wider">
+                                    <i data-lucide="history" class="w-4 h-4 text-brand-500"></i>
+                                    History Log
+                                </h3>
+                                <span class="text-xs bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 px-2.5 py-0.5 rounded-full text-slate-500 dark:text-slate-400 font-bold transition-theme" id="txCount">0 transactions</span>
+                            </div>
+                            
+                            <!-- Scrollable list wrapper -->
+                            <div id="history" class="space-y-2 flex-grow overflow-y-auto pr-1">
+                                <!-- Entries -->
+                            </div>
+                        </div>
+                        
+                        <!-- Pagination control footer -->
+                        <div class="flex justify-between items-center mt-3 pt-3 border-t border-slate-150/80 dark:border-slate-800 flex-shrink-0 transition-theme">
+                            <button onclick="prevPage()" id="btnPrev"
+                                class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50/50 hover:bg-slate-100 dark:bg-slate-950/50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 text-xs font-bold rounded-lg text-slate-655 dark:text-slate-300 transition duration-150 active:scale-95 disabled:opacity-45 disabled:cursor-not-allowed cursor-pointer">
+                                <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i>
+                                Prev
+                            </button>
+                            <span id="pageInfo" class="text-xs font-bold text-slate-500 dark:text-slate-400">Page 1 of 1</span>
+                            <button onclick="nextPage()" id="btnNext"
+                                class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50/50 hover:bg-slate-100 dark:bg-slate-950/50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 text-xs font-bold rounded-lg text-slate-655 dark:text-slate-300 transition duration-150 active:scale-95 disabled:opacity-45 disabled:cursor-not-allowed cursor-pointer">
+                                Next
+                                <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="w-full py-3 flex-shrink-0 border-t border-slate-200/50 dark:border-slate-850/50 bg-white/40 dark:bg-slate-950/40 text-center text-xs text-slate-400 dark:text-slate-500 transition-theme">
+            <p class="font-bold">© 2026 Thiri's SuBuu • Smart Savings Tracker</p>
+        </footer>
+    </div>
+
+    <!-- Confirmation Modal Dialog -->
+    <div id="confirmModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm hidden transition-opacity duration-200 opacity-0">
+        <div class="bg-white dark:bg-slate-900 border border-slate-150/80 dark:border-slate-800/80 rounded-2xl shadow-xl p-6 max-w-sm w-full transform transition-all duration-200 scale-95 opacity-0 flex flex-col items-center text-center" id="confirmModalDialog">
+            <!-- Icon badge -->
+            <div class="w-14 h-14 rounded-full flex items-center justify-center mb-4" id="confirmIconContainer">
+                <i data-lucide="check" class="w-6 h-6" id="confirmIcon"></i>
+            </div>
+            
+            <h4 class="text-lg font-bold text-slate-855 dark:text-slate-100 mb-0.5" id="confirmTitle">Confirm Action</h4>
+            <p class="text-xs text-slate-455 dark:text-slate-500 mb-4 font-bold uppercase tracking-wide">Verify details</p>
+            
+            <!-- Details Grid -->
+            <div class="w-full bg-slate-50 dark:bg-slate-950/30 border border-slate-100 dark:border-slate-800 rounded-xl p-4 mb-5 space-y-3 text-left transition-theme">
+                <div class="flex justify-between items-center text-xs">
+                    <span class="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Type</span>
+                    <span class="font-bold px-2.5 py-0.5 rounded text-[10px] uppercase tracking-wider" id="confirmTypeBadge">Deposit</span>
+                </div>
+                <div class="flex justify-between items-start text-xs border-t border-slate-100 dark:border-slate-800 pt-2.5">
+                    <span class="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Amount</span>
+                    <span class="font-bold text-slate-855 dark:text-slate-100" id="confirmAmountDisplay">0 MMK</span>
+                </div>
+                <div class="flex justify-between items-start text-xs border-t border-slate-100 dark:border-slate-800 pt-2.5">
+                    <span class="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Note</span>
+                    <span class="font-medium text-slate-700 dark:text-slate-300 italic max-w-[150px] break-words text-right" id="confirmNoteDisplay">—</span>
+                </div>
+                <div class="flex justify-between items-center text-xs border-t border-slate-100 dark:border-slate-800 pt-2.5">
+                    <span class="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Balance</span>
+                    <div class="flex items-center gap-2 font-bold text-slate-655 dark:text-slate-355">
+                        <span id="confirmCurrentBal">0</span>
+                        <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-400"></i>
+                        <span class="font-black text-slate-900 dark:text-white" id="confirmFutureBal">0</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Actions -->
+            <div class="grid grid-cols-2 gap-3 w-full">
+                <button onclick="cancelTransaction()"
+                    class="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 font-bold py-2 rounded-lg text-xs transition duration-150 active:scale-95 border border-slate-200/50 dark:border-slate-750 cursor-pointer">
+                    Cancel
+                </button>
+                <button onclick="confirmTransaction()" id="confirmSubmitBtn"
+                    class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-2 rounded-lg text-xs transition duration-150 active:scale-95 cursor-pointer">
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Banner -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 bg-slate-900 text-white dark:bg-white dark:text-slate-900 px-4 py-3 rounded-xl shadow-xl flex items-center gap-2.5 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none border border-slate-800 dark:border-slate-200">
+        <div class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-500 dark:text-emerald-600 flex items-center justify-center">
+            <i data-lucide="check" class="w-4 h-4"></i>
+        </div>
+        <span class="text-sm font-bold" id="toastMessage">Success</span>
+    </div>
+
+    <!-- Scripting Logic -->
+    <script>
+        let db;
+        let balance = 0;
+
+        let allTransactions = [];
+        let filteredTransactions = [];
+
+        let currentPage = 1;
+        const itemsPerPage = 4; // Adjusted to 4 to guarantee zero overflow on short screens
+
+        let currentFilter = "all";
+        let pendingTransaction = null;
+
+        let savingsGoal = parseFloat(localStorage.getItem('savingsGoal')) || 1000000;
+
+        // Open IndexedDB
+        let request = indexedDB.open("SuBuuDB", 1);
+
+        request.onupgradeneeded = function(e) {
+            db = e.target.result;
+            db.createObjectStore("transactions", { keyPath: "id", autoIncrement: true });
+        };
+
+        request.onsuccess = function(e) {
+            db = e.target.result;
+            loadData();
+        };
+
+        // Number Formatting
+        function formatNumber(num) {
+            return num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        }
+
+        // DateTime Helpers
+        function formatTime(date) {
+            let h = date.getHours();
+            let m = String(date.getMinutes()).padStart(2,'0');
+            let session = h >= 12 ? "PM" : "AM";
+            h = h % 12;
+            if (h === 0) h = 12;
+            return `${h}:${m} ${session}`;
+        }
+
+        // Formats date as DD-MM-YY
+        function formatDate(date) {
+            let d = String(date.getDate()).padStart(2,'0');
+            let m = String(date.getMonth()+1).padStart(2,'0');
+            let y = String(date.getFullYear()).slice(-2);
+            return `${d}-${m}-${y}`;
+        }
+
+        // Backward compatibility timestamp parser
+        function getTimestamp(item) {
+            if (item.timestamp) return item.timestamp;
+            try {
+                let parts = item.date.split('-');
+                let day = parseInt(parts[0]);
+                let month = parseInt(parts[1]) - 1;
+                let year = 2000 + parseInt(parts[2]);
+                
+                let timeParts = item.time.split(' ');
+                let hm = timeParts[0].split(':');
+                let hour = parseInt(hm[0]);
+                let min = parseInt(hm[1]);
+                let session = timeParts[1];
+                if (session === "PM" && hour < 12) hour += 12;
+                if (session === "AM" && hour === 12) hour = 0;
+                return new Date(year, month, day, hour, min).getTime();
+            } catch(e) {
+                return 0;
+            }
+        }
+
+        function formatPrettyDate(timestamp) {
+            let date = new Date(timestamp);
+            if (isNaN(date.getTime())) return "Unknown Date";
+            let options = { month: 'short', day: 'numeric', year: 'numeric' };
+            return date.toLocaleDateString('en-US', options);
+        }
+
+        // Pretty Time Formatter
+        function formatPrettyTime(timestamp) {
+            let date = new Date(timestamp);
+            if (isNaN(date.getTime())) return "Unknown Time";
+            let h = date.getHours();
+            let m = String(date.getMinutes()).padStart(2,'0');
+            let session = h >= 12 ? "PM" : "AM";
+            h = h % 12;
+            if (h === 0) h = 12;
+            return `${h}:${m} ${session}`;
+        }
+
+        // Sidebar Toggle Helper for Mobile
+        function toggleSidebar() {
+            const sidebar = document.getElementById("sidebar");
+            const backdrop = document.getElementById("sidebar-backdrop");
+            if (sidebar.classList.contains("-translate-x-full")) {
+                sidebar.classList.remove("-translate-x-full");
+                backdrop.classList.remove("hidden");
+            } else {
+                sidebar.classList.add("-translate-x-full");
+                backdrop.classList.add("hidden");
+            }
+        }
+
+        // Savings Goal logic
+        function updateSavingsGoalUI() {
+            document.getElementById("goalAmountDisplay").innerText = `${formatNumber(savingsGoal)} MMK`;
+            document.getElementById("goalCurrentDisplay").innerText = `${formatNumber(balance)} MMK`;
+            
+            let percent = 0;
+            if (savingsGoal > 0) {
+                percent = Math.min(100, Math.max(0, (balance / savingsGoal) * 100));
+            }
+            
+            document.getElementById("goalProgressBar").style.width = `${percent}%`;
+            document.getElementById("goalPercentDisplay").innerText = `${percent.toFixed(0)}% Achieved`;
+            
+            let left = Math.max(0, savingsGoal - balance);
+            document.getElementById("goalRemainingDisplay").innerText = left > 0 ? `${formatNumber(left)} MMK left` : "Goal Achieved! 🎉";
+        }
+
+        // Set dynamic goal limit
+        function setGoalAmount() {
+            let input = prompt("Enter your new Savings Goal (MMK):", savingsGoal);
+            if (input !== null) {
+                let val = parseFloat(input);
+                if (!isNaN(val) && val > 0) {
+                    savingsGoal = val;
+                    localStorage.setItem('savingsGoal', savingsGoal);
+                    updateSavingsGoalUI();
+                } else {
+                    alert("Please enter a valid number greater than 0.");
+                }
+            }
+        }
+
+        // Theme UI Update (switch state)
+        function updateThemeToggleUI() {
+            const isDark = document.documentElement.classList.contains('dark');
+            const switchBtn = document.querySelector('[role="switch"]');
+            const switchThumb = switchBtn?.querySelector('span');
+            if (switchBtn && switchThumb) {
+                if (isDark) {
+                    switchBtn.classList.add('bg-brand-500');
+                    switchBtn.classList.remove('bg-slate-200');
+                    switchThumb.classList.add('translate-x-5');
+                    switchThumb.classList.remove('translate-x-0');
+                } else {
+                    switchBtn.classList.remove('bg-brand-500');
+                    switchBtn.classList.add('bg-slate-200');
+                    switchThumb.classList.remove('translate-x-5');
+                    switchThumb.classList.add('translate-x-0');
+                }
+            }
+        }
+
+        // Trigger Transaction Confirmation
+        function prepareTransaction(type) {
+            let amountEl = document.getElementById("amount");
+            let amount = parseFloat(amountEl.value);
+            let noteEl = document.getElementById("note");
+            let note = noteEl.value.trim() || null;
+            
+            document.getElementById("amountError").classList.add("hidden");
+            
+            if (isNaN(amount) || amount <= 0) {
+                document.getElementById("amountError").classList.remove("hidden");
+                amountEl.focus();
+                return;
+            }
+            
+            if (type === 'Withdraw' && amount > balance) {
+                alert(`Insufficient Balance! You have ${formatNumber(balance)} MMK, but tried to withdraw ${formatNumber(amount)} MMK.`);
+                return;
+            }
+            
+            pendingTransaction = { type, amount, note };
+            
+            // Set Modal details
+            let modal = document.getElementById("confirmModal");
+            let dialog = document.getElementById("confirmModalDialog");
+            let badge = document.getElementById("confirmTypeBadge");
+            let iconContainer = document.getElementById("confirmIconContainer");
+            let icon = document.getElementById("confirmIcon");
+            let submitBtn = document.getElementById("confirmSubmitBtn");
+            
+            if (type === 'Deposit') {
+                badge.innerText = 'Deposit';
+                badge.className = "font-bold px-2.5 py-0.5 rounded text-[10px] uppercase tracking-wider bg-emerald-50 text-emerald-650 dark:bg-emerald-950/20 dark:text-emerald-400";
+                iconContainer.className = "w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-500 dark:text-emerald-400";
+                icon.setAttribute("data-lucide", "arrow-down-left");
+                submitBtn.className = "w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg text-xs transition duration-150 active:scale-95 cursor-pointer";
+                submitBtn.innerText = "Confirm Deposit";
+            } else {
+                badge.innerText = 'Withdrawal';
+                badge.className = "font-bold px-2.5 py-0.5 rounded text-[10px] uppercase tracking-wider bg-rose-50 text-rose-655 dark:bg-rose-950/20 dark:text-rose-455";
+                iconContainer.className = "w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-rose-50 dark:bg-rose-950/20 text-rose-500 dark:text-rose-400";
+                icon.setAttribute("data-lucide", "arrow-up-right");
+                submitBtn.className = "w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 rounded-lg text-xs transition duration-150 active:scale-95 cursor-pointer";
+                submitBtn.innerText = "Confirm Withdraw";
+            }
+            
+            document.getElementById("confirmAmountDisplay").innerText = `${formatNumber(amount)} MMK`;
+            document.getElementById("confirmNoteDisplay").innerText = note ? note : "—";
+            
+            let futureBal = type === 'Deposit' ? balance + amount : balance - amount;
+            document.getElementById("confirmCurrentBal").innerText = `${formatNumber(balance)}`;
+            document.getElementById("confirmFutureBal").innerText = `${formatNumber(futureBal)}`;
+            
+            lucide.createIcons();
+            
+            // Toggle Display
+            modal.classList.remove("hidden");
+            setTimeout(() => {
+                modal.classList.remove("opacity-0");
+                dialog.classList.remove("scale-95", "opacity-0");
+            }, 30);
+        }
+
+        function cancelTransaction() {
+            let modal = document.getElementById("confirmModal");
+            let dialog = document.getElementById("confirmModalDialog");
+            
+            modal.classList.add("opacity-0");
+            dialog.classList.add("scale-95", "opacity-0");
+            
+            setTimeout(() => {
+                modal.classList.add("hidden");
+                pendingTransaction = null;
+            }, 200);
+        }
+
+        function confirmTransaction() {
+            if (!pendingTransaction) return;
+            
+            let tx = db.transaction("transactions", "readwrite");
+            let store = tx.objectStore("transactions");
+            
+            let now = new Date();
+            
+            store.add({
+                type: pendingTransaction.type,
+                amount: pendingTransaction.amount,
+                note: pendingTransaction.note,
+                date: formatDate(now),
+                time: formatTime(now),
+                timestamp: now.getTime()
+            });
+            
+            tx.oncomplete = function() {
+                showToast(`Successfully processed ${pendingTransaction.type}!`);
+                
+                // Clear fields
+                document.getElementById("amount").value = "";
+                document.getElementById("note").value = "";
+                
+                cancelTransaction();
+                loadData();
+            };
+        }
+
+        function showToast(message) {
+            let toast = document.getElementById("toast");
+            document.getElementById("toastMessage").innerText = message;
+            
+            toast.classList.remove("translate-y-24", "opacity-0");
+            toast.classList.add("translate-y-0", "opacity-100");
+            
+            setTimeout(() => {
+                toast.classList.remove("translate-y-0", "opacity-100");
+                toast.classList.add("translate-y-24", "opacity-0");
+            }, 3000);
+        }
+
+        // Fetch Data & Refresh stats
+        function loadData() {
+            let tx = db.transaction("transactions", "readonly");
+            let store = tx.objectStore("transactions");
+            
+            let req = store.getAll();
+            
+            req.onsuccess = function() {
+                let data = req.result.reverse();
+                allTransactions = data;
+                
+                balance = 0;
+                let totalDep = 0;
+                let totalWit = 0;
+                
+                data.forEach(item => {
+                    if (item.type === "Deposit") {
+                        balance += item.amount;
+                        totalDep += item.amount;
+                    } else {
+                        balance -= item.amount;
+                        totalWit += item.amount;
+                    }
+                });
+                
+                document.getElementById("balanceDisplay").innerText = formatNumber(balance);
+                document.getElementById("totalDeposits").innerText = `${formatNumber(totalDep)} MMK`;
+                document.getElementById("totalWithdrawals").innerText = `${formatNumber(totalWit)} MMK`;
+                
+                updateSavingsGoalUI();
+                applyFilter();
+            };
+        }
+
+        // Light/Dark Theme Switcher
+        function toggleTheme() {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+            }
+            updateThemeToggleUI();
+        }
+
+        // Filter and presets helper
+        function setFilter(type) {
+            currentFilter = type;
+            currentPage = 1;
+            
+            let btnAll = document.getElementById("filter-all");
+            let btnDep = document.getElementById("filter-deposit");
+            let btnWit = document.getElementById("filter-withdraw");
+            
+            const activeClasses = "bg-white dark:bg-slate-800 text-slate-855 dark:text-slate-100 shadow-sm border border-slate-200/30 dark:border-slate-700/50";
+            const inactiveClasses = "text-slate-455 dark:text-slate-400 hover:text-slate-855 dark:hover:text-slate-200 border border-transparent";
+            
+            [btnAll, btnDep, btnWit].forEach(btn => {
+                btn.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all " + inactiveClasses;
+            });
+            
+            if (type === 'all') {
+                btnAll.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all " + activeClasses;
+            } else if (type === 'Deposit') {
+                btnDep.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all " + activeClasses;
+            } else if (type === 'Withdraw') {
+                btnWit.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all " + activeClasses;
+            }
+            
+            applyFilter();
+        }
+
+        // Preset dates on selection change
+        function onDatePresetChange() {
+            let preset = document.getElementById("datePreset").value;
+            let container = document.getElementById("customDateContainer");
+            
+            if (preset === 'custom') {
+                container.classList.remove("opacity-30", "pointer-events-none");
+            } else {
+                container.classList.add("opacity-30", "pointer-events-none");
+                document.getElementById("fromDate").value = "";
+                document.getElementById("toDate").value = "";
+            }
+            
+            currentPage = 1;
+            applyFilter();
+        }
+
+        function onCustomDateChange() {
+            currentPage = 1;
+            applyFilter();
+        }
+
+        function getDateRange(preset) {
+            let start = 0;
+            let end = Infinity;
+            let now = new Date();
+            
+            if (preset === 'today') {
+                let s = new Date(now);
+                s.setHours(0,0,0,0);
+                let e = new Date(now);
+                e.setHours(23,59,59,999);
+                start = s.getTime();
+                end = e.getTime();
+            } else if (preset === 'yesterday') {
+                let s = new Date(now);
+                s.setDate(s.getDate() - 1);
+                s.setHours(0,0,0,0);
+                let e = new Date(now);
+                e.setDate(e.getDate() - 1);
+                e.setHours(23,59,59,999);
+                start = s.getTime();
+                end = e.getTime();
+            } else if (preset === 'week') {
+                let s = new Date(now);
+                let day = s.getDay();
+                let diff = s.getDate() - day + (day === 0 ? -6 : 1); // Monday start
+                s.setDate(diff);
+                s.setHours(0,0,0,0);
+                start = s.getTime();
+            } else if (preset === 'month') {
+                let s = new Date(now.getFullYear(), now.getMonth(), 1);
+                s.setHours(0,0,0,0);
+                start = s.getTime();
+            }
+            return { start, end };
+        }
+
+        function applyFilter() {
+            let preset = document.getElementById("datePreset").value;
+            let { start, end } = getDateRange(preset);
+            
+            if (preset === 'custom') {
+                let fromVal = document.getElementById("fromDate").value;
+                let toVal = document.getElementById("toDate").value;
+                
+                if (fromVal) {
+                    let s = new Date(fromVal);
+                    s.setHours(0,0,0,0);
+                    start = s.getTime();
+                }
+                if (toVal) {
+                    let e = new Date(toVal);
+                    e.setHours(23,59,59,999);
+                    end = e.getTime();
+                }
+            }
+            
+            filteredTransactions = allTransactions.filter(item => {
+                let itemTime = getTimestamp(item);
+                let matchDate = (itemTime >= start && itemTime <= end);
+                let matchType = (currentFilter === "all" || item.type === currentFilter);
+                return matchDate && matchType;
+            });
+            
+            renderPage();
+        }
+
+        // Render History list & Pagination status
+        function renderPage() {
+            if (filteredTransactions.length === 0) {
+                document.getElementById("history").innerHTML = `
+                <div class="flex flex-col items-center justify-center py-20 text-slate-400 dark:text-slate-500 transition-theme h-full">
+                    <i data-lucide="folder-open" class="w-10 h-10 mb-3 stroke-[1.5] text-slate-350 dark:text-slate-655"></i>
+                    <p class="text-xs font-bold uppercase tracking-wider">No Records Found</p>
+                    <p class="text-xs mt-1 text-slate-400 dark:text-slate-500 text-center">There are no transactions matching these criteria.</p>
+                </div>
+                `;
+                lucide.createIcons();
+                document.getElementById("txCount").innerText = "0 transactions";
+                document.getElementById("pageInfo").innerText = "Page 1 of 1";
+                document.getElementById("btnPrev").disabled = true;
+                document.getElementById("btnNext").disabled = true;
+                return;
+            }
+            
+            let start = (currentPage - 1) * itemsPerPage;
+            let end = start + itemsPerPage;
+            let pageItems = filteredTransactions.slice(start, end);
+            
+            let html = "";
+            pageItems.forEach(item => {
+                let isDep = item.type === 'Deposit';
+                let sign = isDep ? '+' : '-';
+                let accentBorderClass = isDep ? 'border-l-[4px] border-l-emerald-500' : 'border-l-[4px] border-l-rose-500';
+                let colorClass = isDep ? 'text-emerald-650 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20' : 'text-rose-655 dark:text-rose-455 bg-rose-50 dark:bg-rose-950/20';
+                let iconName = isDep ? 'arrow-down-left' : 'arrow-up-right';
+                
+                let prettyD = formatPrettyDate(getTimestamp(item));
+                let prettyT = formatPrettyTime(getTimestamp(item));
+                
+                html += `
+                <div class="flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-850/80 rounded-xl hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm transition duration-150 flex-shrink-0 ${accentBorderClass}">
+                    <div class="flex items-center gap-3.5 min-w-0">
+                        <div class="p-2 rounded-lg ${colorClass} flex-shrink-0">
+                            <i data-lucide="${iconName}" class="w-4 h-4"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">${item.type}</p>
+                            ${item.note ? `
+                            <p class="text-sm font-bold text-slate-750 dark:text-slate-200 mt-0.5 truncate max-w-[200px]" title="${item.note}">
+                                ${item.note}
+                            </p>` : ''}
+                            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1 flex items-center gap-1.5">
+                                <i data-lucide="clock" class="w-4 h-4"></i>
+                                ${prettyD} • ${prettyT}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="text-right flex-shrink-0 ml-3">
+                        <span class="text-sm font-extrabold tracking-tight ${isDep ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-655 dark:text-rose-455'}">
+                            ${sign}${formatNumber(item.amount)}
+                        </span>
+                        <span class="text-xs font-bold text-slate-400 dark:text-slate-555 block">MMK</span>
+                    </div>
+                </div>
+                `;
+            });
+            
+            document.getElementById("history").innerHTML = html;
+            lucide.createIcons();
+            
+            let totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+            document.getElementById("pageInfo").innerText = `Page ${currentPage} of ${totalPages || 1}`;
+            document.getElementById("btnPrev").disabled = (currentPage === 1);
+            document.getElementById("btnNext").disabled = (currentPage >= totalPages || totalPages === 0);
+            
+            document.getElementById("txCount").innerText = `${filteredTransactions.length} transaction${filteredTransactions.length === 1 ? '' : 's'}`;
+        }
+
+        // Pagination buttons
+        function nextPage() {
+            let totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderPage();
+            }
+        }
+
+        // Paginate backward
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderPage();
+            }
+        }
+
+        // Initialize theme & load database
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            updateThemeToggleUI();
+        });
+    </script>
 </body>
 </html>
